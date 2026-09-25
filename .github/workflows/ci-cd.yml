@@ -46,7 +46,7 @@ jobs:
       - name: Deploy to AKS
         run: |
           mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d | tr -d '\r' > $HOME/.kube/config
           kubectl apply -f kubernetes/
           kubectl rollout restart deployment/course-service
           kubectl rollout restart deployment/frontend
