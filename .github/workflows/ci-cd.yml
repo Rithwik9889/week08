@@ -40,13 +40,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Set up kubectl
         uses: azure/setup-kubectl@v3
 
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials --resource-group sit722-rg --name sit722-aks-cluster --overwrite-existing
+
       - name: Deploy to AKS
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d | tr -d '\r' > $HOME/.kube/config
           kubectl apply -f kubernetes/
           kubectl rollout restart deployment/course-service
           kubectl rollout restart deployment/frontend
