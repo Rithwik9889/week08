@@ -232,6 +232,38 @@ services:
     networks:
       - koalatech-network
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - koalatech-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - koalatech-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8080:8080"
+    volumes:
+      - //var/run:/var/run:ro
+      - //sys:/sys:ro
+      - //var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - koalatech-network
+
 networks:
   koalatech-network:
     driver: bridge

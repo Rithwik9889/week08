@@ -1,0 +1,57 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push course-service
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/course-service:${{ github.sha }} -t ${{ secrets.ACR_LOGIN_SERVER }}/course-service:latest ./course-service
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/course-service:${{ github.sha }}
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/course-service:latest
+
+      - name: Build and push frontend
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }} -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest ./frontend
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Deploy to AKS
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          kubectl apply -f kubernetes/
+          kubectl rollout restart deployment/course-service
+          kubectl rollout restart deployment/frontend
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/course-service --timeout=120s
+          kubectl rollout status deployment/frontend --timeout=120s
