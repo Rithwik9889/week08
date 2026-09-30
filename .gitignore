@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+﻿# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -197,4 +197,9 @@ cython_debug/
 .cursorindexingignore
 
 node_modules/
-terraform/
+# terraform/ (folder rule removed - was ignoring code)
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+azure-creds.json

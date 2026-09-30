@@ -1,0 +1,117 @@
+﻿name: 10.2D - Infra, Security & Monitoring
+
+on:
+  push:
+    branches: [feature/task-10-2d, main]
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: Infrastructure (Terraform)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+  security-scan:
+    name: Docker Scout Scan
+    runs-on: ubuntu-latest
+    needs: terraform
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [course-service, frontend, user-service, student-service, lecturer-service, enrollment-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build image
+        run: docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }} ./${{ matrix.service }}
+
+      - name: Docker Scout - CVEs
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }}
+          sarif-file: scout-${{ matrix.service }}.sarif
+          only-severities: critical,high
+          exit-code: false
+
+      - name: Docker Scout - Recommendations
+        uses: docker/scout-action@v1
+        with:
+          command: recommendations
+          image: ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }}
+
+      - name: Push image
+        run: docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }}
+
+      - name: Upload SARIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-${{ matrix.service }}
+          path: scout-${{ matrix.service }}.sarif
+
+  monitoring:
+    name: Deploy Prometheus & Grafana
+    runs-on: ubuntu-latest
+    needs: security-scan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS credentials
+        run: az aks get-credentials --resource-group sit722-week08-rithwik-225379656-rg --name aks-rithwik-225379656 --overwrite-existing
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Add Prometheus Helm repo
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+      - name: Install kube-prometheus-stack
+        run: |
+          helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+            --namespace monitoring --create-namespace \
+            --set grafana.adminPassword='SIT722admin!' \
+            --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+            --wait --timeout 10m
+
+      - name: Verify monitoring pods
+        run: kubectl get pods -n monitoring
