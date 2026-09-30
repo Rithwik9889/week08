@@ -74,6 +74,8 @@ jobs:
         uses: docker/scout-action@v1
         with:
           command: cves
+          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }}
           image: ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }}
           sarif-file: scout-${{ matrix.service }}.sarif
           only-severities: critical,high
@@ -83,6 +85,8 @@ jobs:
         uses: docker/scout-action@v1
         with:
           command: recommendations
+          dockerhub-user: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKERHUB_TOKEN }}
           image: ${{ secrets.ACR_LOGIN_SERVER }}/${{ matrix.service }}:${{ github.sha }}
 
       - name: Push image
@@ -127,3 +131,4 @@ jobs:
 
       - name: Verify monitoring pods
         run: kubectl get pods -n monitoring
+
